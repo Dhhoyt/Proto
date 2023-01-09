@@ -30,9 +30,44 @@ impl Graph {
     }
 
     fn add_connection(&mut self, new_connection: Connection) -> Result<(), ConnectionError>{
-        let from = self.components.get(&new_connection.from.id);
-        let to = self.components.get(&new_connection.from.id);
-        
+        if new_connection.from.id == new_connection.to.id {
+            return Result::Err(ConnectionError::LoopingConnection);
+        }
+        let from = self.components.get_mut(&new_connection.from.id);
+        let from = match from { 
+            Some(c) => c,
+            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+        };
+        from.out_connections.insert(new_connection.clone());
+        let to = self.components.get_mut(&new_connection.from.id);
+        let to = match to { 
+            Some(c) => c,
+            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+        };
+        to.in_connections.insert(new_connection.clone());
+        if self.loooping_graph(new_connection.to.id) {
+            #[allow(unused_must_use)] {
+                self.remove_connection(new_connection);
+            }
+            return Result::Err(ConnectionError::LoopingConnection);
+        }
+
+        Result::Ok(())
+    }
+
+    fn remove_connection(&mut self, old_connection: Connection) -> Result<(), ConnectionError>{
+        let from = self.components.get_mut(&old_connection.from.id);
+        let from = match from { 
+            Some(c) => c,
+            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+        };
+        from.out_connections.remove(&old_connection);
+        let to = self.components.get_mut(&old_connection.from.id);
+        let to = match to { 
+            Some(c) => c,
+            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+        };
+        to.in_connections.remove(&old_connection);
         Result::Ok(())
     }
 
@@ -59,10 +94,11 @@ impl Graph {
 }
 
 enum ConnectionError {
-    LoopingConnection
+    LoopingConnection,
+    ControllerNotInGraph
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 struct Node {
     id: usize,
     io: IOType,
@@ -70,7 +106,7 @@ struct Node {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 struct Connection {
     from: Node,
     to: Node
@@ -126,7 +162,7 @@ struct IO {
     midi: HashMap<String, Vec<MidiEvent>>
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash, Eq, PartialEq)]
 enum IOType {
     Voltage,
     Midi
