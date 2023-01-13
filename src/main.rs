@@ -13,7 +13,7 @@ struct Graph {
 }
 
 impl Graph {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Graph { components: HashMap::new(), next_free_id: 0 }
     }
 
@@ -23,13 +23,13 @@ impl Graph {
         }
     }
 
-    fn add_component(&mut self, model: Box<dyn Model>) -> usize{
-        self.components.insert(self.next_free_id, Component::new(model));
+    pub fn add_component(&mut self, model: Box<dyn Model>) -> usize{
+        self.components.insert(self.next_free_id, Component::new(self.next_free_id, model));
         self.next_free_id += 1;
         self.next_free_id - 1
     }
 
-    fn add_connection(&mut self, new_connection: Connection) -> Result<(), ConnectionError>{
+    pub fn add_connection(&mut self, new_connection: Connection) -> Result<(), ConnectionError>{
         if new_connection.from.id == new_connection.to.id {
             return Result::Err(ConnectionError::LoopingConnection);
         }
@@ -40,19 +40,34 @@ impl Graph {
         };
         from.out_connections.insert(new_connection.clone());
         let to = self.components.get_mut(&new_connection.from.id);
-        let to = match to { 
+        match to { 
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph)
         };
-        to.in_connections.insert(new_connection.clone());
-        if self.loooping_graph(new_connection.to.id) {
-            #[allow(unused_must_use)] {
-                self.remove_connection(new_connection);
-            }
-            return Result::Err(ConnectionError::LoopingConnection);
-        }
+        
 
         Result::Ok(())
+    }
+
+    //This code is iffy
+    fn sort(&self) -> Result<Vec<usize>, ConnectionError> {
+        //https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
+        let mut connections = self.connections();
+        let mut S = self.components.values().filter(|c| c.in_connections.len() == 0).collect();
+
+        while S.len() > 0 {
+
+        }
+
+        Ok(Vec::new())
+    }
+
+    fn connections(&self) -> HashSet<Connection> {
+        let mut connections: HashSet<Connection> = HashSet::new();
+        for (_, component) in &self.components {
+            connections.extend(component.out_connections.clone());
+        }
+        return connections;
     }
 
     fn remove_connection(&mut self, old_connection: Connection) -> Result<(), ConnectionError>{
@@ -69,27 +84,6 @@ impl Graph {
         };
         to.in_connections.remove(&old_connection);
         Result::Ok(())
-    }
-
-    fn loooping_graph(&self, start: usize) -> bool {
-        //Simple depth first search
-        let mut stack: Vec<usize> = Vec::new();
-        let mut visited: HashSet<usize> = HashSet::new();
-        stack.push(start);
-        visited.insert(start);
-        while stack.len() > 0 {
-            let current: usize = stack.pop().unwrap();
-            let current: &Component = self.components.get(&current).unwrap();
-            for i in current.out_connections.clone().into_iter() {
-                if i.to.id == start {
-                    return true;
-                }
-                if visited.insert(i.to.id) {
-                    stack.push(i.to.id);
-                }
-            }
-        }
-        false
     }
 }
 
@@ -113,6 +107,7 @@ struct Connection {
 }
 
 struct Component {
+    id: usize,
     model: Box<dyn Model>,
     inputs: IO,
     outputs: IO,
@@ -123,8 +118,9 @@ struct Component {
 }
 
 impl Component {
-    fn new(model: Box<dyn Model>) -> Self{
+    fn new(id: usize, model: Box<dyn Model>) -> Self{
         Component { 
+            id: id,
             inputs: IO::default(), 
             outputs: IO::default(), 
             input_format: model.input_format(),
