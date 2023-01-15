@@ -1,20 +1,24 @@
 #![allow(dead_code)]
 
-use std::{collections::{HashMap, HashSet}, vec};
+use std::{
+    collections::{HashMap, HashSet},
+    vec,
+};
 
 fn main() {
-    
 }
-
 
 struct Graph {
     components: HashMap<usize, Component>,
-    next_free_id: usize
+    next_free_id: usize,
 }
 
 impl Graph {
     pub fn new() -> Self {
-        Graph { components: HashMap::new(), next_free_id: 0 }
+        Graph {
+            components: HashMap::new(),
+            next_free_id: 0,
+        }
     }
 
     fn process(&mut self, buffer_size: usize) {
@@ -23,28 +27,28 @@ impl Graph {
         }
     }
 
-    pub fn add_component(&mut self, model: Box<dyn Model>) -> usize{
-        self.components.insert(self.next_free_id, Component::new(self.next_free_id, model));
+    pub fn add_component(&mut self, model: Box<dyn Model>) -> usize {
+        self.components
+            .insert(self.next_free_id, Component::new(self.next_free_id, model));
         self.next_free_id += 1;
         self.next_free_id - 1
     }
 
-    pub fn add_connection(&mut self, new_connection: Connection) -> Result<(), ConnectionError>{
+    pub fn add_connection(&mut self, new_connection: Connection) -> Result<(), ConnectionError> {
         if new_connection.from.id == new_connection.to.id {
             return Result::Err(ConnectionError::LoopingConnection);
         }
         let from = self.components.get_mut(&new_connection.from.id);
-        let from = match from { 
+        let from = match from {
             Some(c) => c,
-            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+            None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
         from.out_connections.insert(new_connection.clone());
         let to = self.components.get_mut(&new_connection.from.id);
-        match to { 
+        match to {
             Some(c) => c,
-            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+            None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
-        
 
         Result::Ok(())
     }
@@ -52,14 +56,21 @@ impl Graph {
     //This code is iffy
     fn sort(&self) -> Result<Vec<usize>, ConnectionError> {
         //https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
-        let mut connections = self.connections();
-        let mut S = self.components.values().filter(|c| c.in_connections.len() == 0).collect();
+        let mut connections: Vec<(usize, usize)> = self.connections().into_iter().map(|c| (c.from.id, c.to.id)).collect();
+        let mut s: Vec<(&usize, &Component)> = self
+            .components
+            .iter()
+            .filter(|c| c.1.in_connections.len() == 0)
+            .collect();
+        let mut l: Vec<usize> = Vec::new();
 
-        while S.len() > 0 {
-
+        while s.len() > 0 {
+            let n = s.pop().unwrap();
+            l.push(*n.0);
+     
         }
 
-        Ok(Vec::new())
+        Ok(l)
     }
 
     fn connections(&self) -> HashSet<Connection> {
@@ -70,17 +81,17 @@ impl Graph {
         return connections;
     }
 
-    fn remove_connection(&mut self, old_connection: Connection) -> Result<(), ConnectionError>{
+    fn remove_connection(&mut self, old_connection: Connection) -> Result<(), ConnectionError> {
         let from = self.components.get_mut(&old_connection.from.id);
-        let from = match from { 
+        let from = match from {
             Some(c) => c,
-            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+            None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
         from.out_connections.remove(&old_connection);
         let to = self.components.get_mut(&old_connection.from.id);
-        let to = match to { 
+        let to = match to {
             Some(c) => c,
-            None => return Result::Err(ConnectionError::ControllerNotInGraph)
+            None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
         to.in_connections.remove(&old_connection);
         Result::Ok(())
@@ -89,21 +100,20 @@ impl Graph {
 
 enum ConnectionError {
     LoopingConnection,
-    ControllerNotInGraph
+    ControllerNotInGraph,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq)]
 struct Node {
     id: usize,
     io: IOType,
-    name: String
+    name: String,
 }
-
 
 #[derive(Clone, Hash, Eq, PartialEq)]
 struct Connection {
     from: Node,
-    to: Node
+    to: Node,
 }
 
 struct Component {
@@ -114,15 +124,15 @@ struct Component {
     input_format: HashMap<String, IOType>,
     output_format: HashMap<String, IOType>,
     in_connections: HashSet<Connection>,
-    out_connections: HashSet<Connection>
+    out_connections: HashSet<Connection>,
 }
 
 impl Component {
-    fn new(id: usize, model: Box<dyn Model>) -> Self{
-        Component { 
+    fn new(id: usize, model: Box<dyn Model>) -> Self {
+        Component {
             id: id,
-            inputs: IO::default(), 
-            outputs: IO::default(), 
+            inputs: IO::default(),
+            outputs: IO::default(),
             input_format: model.input_format(),
             output_format: model.output_format(),
             in_connections: HashSet::new(),
@@ -138,8 +148,12 @@ impl Component {
 
         for (name, io_type) in request {
             match io_type {
-                IOType::Voltage => {new_input.voltages.insert(name, vec![0.;buffer_size]);},
-                IOType::Midi => {new_input.midi.insert(name, Vec::new());}
+                IOType::Voltage => {
+                    new_input.voltages.insert(name, vec![0.; buffer_size]);
+                }
+                IOType::Midi => {
+                    new_input.midi.insert(name, Vec::new());
+                }
             }
         }
 
@@ -148,20 +162,18 @@ impl Component {
 }
 
 #[derive(Default)]
-struct MidiEvent {
-
-}
+struct MidiEvent {}
 
 #[derive(Default)]
 struct IO {
     voltages: HashMap<String, Vec<f32>>,
-    midi: HashMap<String, Vec<MidiEvent>>
+    midi: HashMap<String, Vec<MidiEvent>>,
 }
 
 #[derive(Clone, Copy, Hash, Eq, PartialEq)]
 enum IOType {
     Voltage,
-    Midi
+    Midi,
 }
 
 trait Model {
