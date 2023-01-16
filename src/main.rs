@@ -5,12 +5,12 @@ use std::{
     vec,
 };
 
-fn main() {
-}
+fn main() {}
 
 struct Graph {
     components: HashMap<usize, Component>,
     next_free_id: usize,
+    evaluation_order: Vec<usize>,
 }
 
 impl Graph {
@@ -18,6 +18,7 @@ impl Graph {
         Graph {
             components: HashMap::new(),
             next_free_id: 0,
+            evaluation_order: Vec::new()
         }
     }
 
@@ -34,43 +35,49 @@ impl Graph {
         self.next_free_id - 1
     }
 
+    pub fn set_model(&mut self, target: usize, new_model: Box<dyn Model>) -> Result<(), ConnectionError> {
+        match self.components.get_mut(&target) {
+            Some(c) => {c.model = new_model; return Ok(());}
+            None => Err(ConnectionError::ControllerNotInGraph)
+        }
+    }
+
+    pub fn remove_component(&mut self, to_remove: usize) -> bool {
+        let to_remove = self.components.get(&to_remove);
+        let to_remove = match to_remove {
+            Some(v) => (v.in_connections.clone(), v.out_connections.clone()),
+            None => return false,
+        };
+        for c in to_remove.0 {
+            self.remove_connection(c).unwrap();
+        }
+        for c in to_remove.1{
+            self.remove_connection(c).unwrap();
+        }
+        true
+    }
+
     pub fn add_connection(&mut self, new_connection: Connection) -> Result<(), ConnectionError> {
         if new_connection.from.id == new_connection.to.id {
             return Result::Err(ConnectionError::LoopingConnection);
         }
         let from = self.components.get_mut(&new_connection.from.id);
-        let from = match from {
+        let from: &mut Component = match from {
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
         from.out_connections.insert(new_connection.clone());
         let to = self.components.get_mut(&new_connection.from.id);
-        match to {
+        let to: &mut Component = match to {
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
-
-        Result::Ok(())
-    }
-
-    //This code is iffy
-    fn sort(&self) -> Result<Vec<usize>, ConnectionError> {
-        //https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
-        let mut connections: Vec<(usize, usize)> = self.connections().into_iter().map(|c| (c.from.id, c.to.id)).collect();
-        let mut s: Vec<(&usize, &Component)> = self
-            .components
-            .iter()
-            .filter(|c| c.1.in_connections.len() == 0)
-            .collect();
-        let mut l: Vec<usize> = Vec::new();
-
-        while s.len() > 0 {
-            let n = s.pop().unwrap();
-            l.push(*n.0);
-     
+        to.in_connections.insert(new_connection.clone());
+        let ord = self.sort();
+        match ord {
+            Err(e) => {self.remove_connection(new_connection).unwrap(); Err(e)}
+            Ok(l) => {self.evaluation_order = l; Ok(())}
         }
-
-        Ok(l)
     }
 
     fn connections(&self) -> HashSet<Connection> {
@@ -81,7 +88,7 @@ impl Graph {
         return connections;
     }
 
-    fn remove_connection(&mut self, old_connection: Connection) -> Result<(), ConnectionError> {
+    pub fn remove_connection(&mut self, old_connection: Connection) -> Result<bool, ConnectionError> {
         let from = self.components.get_mut(&old_connection.from.id);
         let from = match from {
             Some(c) => c,
@@ -93,11 +100,54 @@ impl Graph {
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
-        to.in_connections.remove(&old_connection);
-        Result::Ok(())
+        Ok(to.in_connections.remove(&old_connection))
+    }
+
+    fn sort(&self) -> Result<Vec<usize>, ConnectionError> {
+        //https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm; Comments are from the pseudocode
+        let mut connections: Vec<(usize, usize)> = self
+            .connections()
+            .into_iter()
+            .map(|c| (c.from.id, c.to.id))
+            .collect();
+        //S ← Set of all nodes with no incoming edge
+        let mut s: Vec<usize> = self
+            .components
+            .iter()
+            .filter(|x| x.1.in_connections.len() == 0)
+            .map(|x| x.0.clone())
+            .collect();
+        //L ← Empty list that will contain the sorted elements
+        let mut l: Vec<usize> = Vec::new();
+
+        //while S is not empty do
+        while s.len() > 0 {
+            //remove a node n from S
+            let n = s.pop().unwrap();
+            //add n to L
+            l.push(n);
+            //for each node m with an edge e from n to m do
+            for m in connections.clone().iter().filter(|x| x.0 == n).map(|x| x.1) {
+                //remove edge e from the graph
+                connections.retain(|x| x.0 != n || x.1 != m);
+                //if m has no other incoming edges then
+                if !connections.iter().any(|x| x.1 == m) {
+                    s.push(m);
+                }
+            }
+        }
+        //if graph has edges then
+        if !connections.is_empty() {
+            //return error   (graph has at least one cycle)
+            return Err(ConnectionError::LoopingConnection);
+        }
+        //else
+        //return L   (a topologically sorted order)
+        Ok(l)
     }
 }
 
+#[derive(Debug)]
 enum ConnectionError {
     LoopingConnection,
     ControllerNotInGraph,
