@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{
     collections::{HashMap, HashSet},
     vec,
@@ -18,7 +16,17 @@ impl Graph {
         Graph {
             components: HashMap::new(),
             next_free_id: 0,
-            evaluation_order: Vec::new()
+            evaluation_order: Vec::new(),
+        }
+    }
+
+    pub fn evaluate(&mut self, buffer_size: usize) {
+        for i in self.components.values_mut() {
+            i.reset_inputs(buffer_size);
+            i.reset_outputs(buffer_size);
+        }
+        for i in self.evaluation_order.iter() {
+            self.components.get_mut(i).unwrap().evaluate();
         }
     }
 
@@ -35,10 +43,17 @@ impl Graph {
         self.next_free_id - 1
     }
 
-    pub fn set_model(&mut self, target: usize, new_model: Box<dyn Model>) -> Result<(), ConnectionError> {
+    pub fn set_model(
+        &mut self,
+        target: usize,
+        new_model: Box<dyn Model>,
+    ) -> Result<(), ConnectionError> {
         match self.components.get_mut(&target) {
-            Some(c) => {c.model = new_model; return Ok(());}
-            None => Err(ConnectionError::ControllerNotInGraph)
+            Some(c) => {
+                c.model = new_model;
+                return Ok(());
+            }
+            None => Err(ConnectionError::ControllerNotInGraph),
         }
     }
 
@@ -51,7 +66,7 @@ impl Graph {
         for c in to_remove.0 {
             self.remove_connection(c).unwrap();
         }
-        for c in to_remove.1{
+        for c in to_remove.1 {
             self.remove_connection(c).unwrap();
         }
         true
@@ -75,8 +90,14 @@ impl Graph {
         to.in_connections.insert(new_connection.clone());
         let ord = self.sort();
         match ord {
-            Err(e) => {self.remove_connection(new_connection).unwrap(); Err(e)}
-            Ok(l) => {self.evaluation_order = l; Ok(())}
+            Err(e) => {
+                self.remove_connection(new_connection).unwrap();
+                Err(e)
+            }
+            Ok(l) => {
+                self.evaluation_order = l;
+                Ok(())
+            }
         }
     }
 
@@ -88,7 +109,10 @@ impl Graph {
         return connections;
     }
 
-    pub fn remove_connection(&mut self, old_connection: Connection) -> Result<bool, ConnectionError> {
+    pub fn remove_connection(
+        &mut self,
+        old_connection: Connection,
+    ) -> Result<bool, ConnectionError> {
         let from = self.components.get_mut(&old_connection.from.id);
         let from = match from {
             Some(c) => c,
@@ -171,8 +195,6 @@ struct Component {
     model: Box<dyn Model>,
     inputs: IO,
     outputs: IO,
-    input_format: HashMap<String, IOType>,
-    output_format: HashMap<String, IOType>,
     in_connections: HashSet<Connection>,
     out_connections: HashSet<Connection>,
 }
@@ -183,31 +205,52 @@ impl Component {
             id: id,
             inputs: IO::default(),
             outputs: IO::default(),
-            input_format: model.input_format(),
-            output_format: model.output_format(),
             in_connections: HashSet::new(),
             out_connections: HashSet::new(),
             model: model,
         }
     }
 
+    fn evaluate(&mut self) {
+        self.model.evaluate(&mut self.inputs, &mut self.outputs);
+    }
+
     fn reset_inputs(&mut self, buffer_size: usize) {
         let request = self.model.input_format();
 
-        let mut new_input = IO::default();
+        let mut new_inputs = IO::default();
 
         for (name, io_type) in request {
             match io_type {
                 IOType::Voltage => {
-                    new_input.voltages.insert(name, vec![0.; buffer_size]);
+                    new_inputs.voltages.insert(name, vec![0.; buffer_size]);
                 }
                 IOType::Midi => {
-                    new_input.midi.insert(name, Vec::new());
+                    new_inputs.midi.insert(name, Vec::new());
                 }
             }
         }
 
-        self.inputs = new_input;
+        self.inputs = new_inputs;
+    }
+
+    fn reset_outputs(&mut self, buffer_size: usize) {
+        let request = self.model.output_format();
+
+        let mut new_outputs = IO::default();
+
+        for (name, io_type) in request {
+            match io_type {
+                IOType::Voltage => {
+                    new_outputs.voltages.insert(name, vec![0.; buffer_size]);
+                }
+                IOType::Midi => {
+                    new_outputs.midi.insert(name, Vec::new());
+                }
+            }
+        }
+
+        self.outputs = new_outputs;
     }
 }
 
@@ -227,7 +270,7 @@ enum IOType {
 }
 
 trait Model {
-    fn process(&mut self, inputs: &IO, outputs: &mut IO);
+    fn evaluate(&mut self, inputs: &IO, outputs: &mut IO);
 
     fn input_format(&self) -> HashMap<String, IOType>;
 
