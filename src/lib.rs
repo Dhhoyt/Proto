@@ -25,8 +25,32 @@ impl Graph {
             i.reset_inputs(buffer_size);
             i.reset_outputs(buffer_size);
         }
-        for i in self.evaluation_order.iter() {
-            self.components.get_mut(i).unwrap().evaluate();
+        for i in self.evaluation_order.clone().iter() {
+            let current_compoent = self.components.get_mut(i).unwrap();
+            current_compoent.evaluate();
+            for connection in current_compoent.out_connections.clone().iter() {
+                self.copy_buffers(connection);
+            }
+        }
+    }
+
+    fn copy_buffers(&mut self, connection: &Connection) {
+        match connection.from.io {
+            IOType::Voltage => {
+                let from = self.components.get(&connection.from.id).unwrap();
+                let source = from
+                    .outputs
+                    .voltages
+                    .get(&connection.to.name)
+                    .unwrap()
+                    .clone();
+                let to = self.components.get_mut(&connection.to.id).unwrap();
+                let dest = to.inputs.voltages.get_mut(&connection.to.name).unwrap();
+                for (a, b) in dest.iter_mut().zip(source) {
+                    *a += b;
+                }
+            }
+            IOType::Midi => {}
         }
     }
 
@@ -269,10 +293,17 @@ enum IOType {
     Midi,
 }
 
+//Gotta change this name
+enum DataTypes {
+    Voltage(f32),
+}
+
 trait Model {
     fn evaluate(&mut self, inputs: &IO, outputs: &mut IO);
 
     fn input_format(&self) -> HashMap<String, IOType>;
 
     fn output_format(&self) -> HashMap<String, IOType>;
+
+    fn pass_data(&self, data: DataTypes);
 }
