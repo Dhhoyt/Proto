@@ -59,3 +59,27 @@ impl Model for DuoSignalMixer {
         }
     }
 }
+
+pub struct Vca;
+
+impl Model for Vca {
+    fn input_format(&self) -> std::collections::HashMap<String, crate::IOType> {
+        let mut input_format = HashMap::new();
+        input_format.insert(String::from("Input"), IOType::Voltage);
+        input_format.insert(String::from("Control"), IOType::Voltage);
+        input_format
+    }
+    fn output_format(&self) -> std::collections::HashMap<String, crate::IOType> {
+        let mut output_format = HashMap::new();
+        output_format.insert(String::from("Output"), IOType::Voltage);
+        output_format
+    }
+    fn evaluate(&mut self, _buffer_size: usize, inputs: crate::Input, outputs: &mut crate::Output) {
+        let input = inputs.voltages.get("Input").unwrap();
+        let control = inputs.voltages.get("Control").unwrap();
+        let output = outputs.voltages.get_mut("Output").unwrap();
+        for (index, sample) in zip(input.iter(), control.iter()).enumerate() {
+            output[index] = sample.0 * sample.1;
+        }
+    }
+}
