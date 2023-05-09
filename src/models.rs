@@ -1,17 +1,19 @@
-use std::collections::HashMap;
-use crate::graph::{Model, IOType, Input, Output};
-use cpal::{traits::{HostTrait, DeviceTrait, StreamTrait}, SampleRate};
+use std::{collections::HashMap};
+use cpal::{traits::{HostTrait, DeviceTrait, StreamTrait}, SampleRate, Stream};
 use rtrb::{Consumer, RingBuffer, Producer};
 
-pub struct AudioInput(Consumer<f32>);
+use crate::{IOType, Output, Input, Model};
 
-const STREAMCONFIG: cpal::StreamConfig = cpal::StreamConfig { channels: 2, sample_rate: SampleRate(48000), buffer_size: cpal::BufferSize::Fixed(64)};
+pub struct AudioInput(Consumer<f32>, Stream);
 
 impl AudioInput {
-    pub fn new() -> Self {
+    pub fn new(stream_config: &cpal::StreamConfig) -> Self {
         let host = cpal::default_host();
         let input_device = host.default_input_device().unwrap();
         let (mut producer, consumer) = RingBuffer::<f32>::new(16384);
+        for _ in 0..512 {
+            producer.push(0.).unwrap();
+        }
         let input_data_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
             let mut output_fell_behind = false;
             for &sample in data {
@@ -22,10 +24,11 @@ impl AudioInput {
             if output_fell_behind {
                 eprintln!("output stream fell behind: try increasing latency");
             }
+            
         };
-        let input_stream = input_device.build_input_stream(&STREAMCONFIG, input_data_fn, err_fn, None).unwrap();
+        let input_stream = input_device.build_input_stream(stream_config, input_data_fn, err_fn, None).unwrap();
         input_stream.play().unwrap();
-        AudioInput(consumer)
+        AudioInput(consumer, input_stream)
     }
 }
 
@@ -38,7 +41,7 @@ impl Model for AudioInput {
         outputs.insert(String::from("Audio"), IOType::Voltage);
         outputs
     }
-    fn evaluate(&mut self, buffer_size: usize, inputs: Input, outputs: &mut Output) {
+    fn evaluate(&mut self, buffer_size: usize, _inputs: Input, outputs: &mut Output) {
         let mut audio: Vec<f32> = Vec::with_capacity(buffer_size);
         for _ in 0..buffer_size {
             match self.0.pop() {
@@ -51,6 +54,7 @@ impl Model for AudioInput {
 }
 
 unsafe impl Sync for AudioInput{}
+unsafe impl Send for AudioInput{}
 
 pub struct AudioOutput(Producer<f32>);
 

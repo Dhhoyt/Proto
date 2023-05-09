@@ -2,6 +2,8 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
+use crate::{Model, Output, Input, ConnectionError, Connection, IOType};
+
 
 pub struct Graph {
     buffer_size: usize,
@@ -66,6 +68,7 @@ impl Graph {
             },
         );
         self.next_free_id += 1;
+        self.evaluation_order = self.sort().unwrap();
         self.next_free_id - 1
     }
 
@@ -125,7 +128,7 @@ impl Graph {
         let from = self.components.get_mut(&new_connection.from.id).unwrap();
         from.out_connections.insert(new_connection.clone());
 
-        let to = self.components.get_mut(&new_connection.from.id).unwrap();
+        let to = self.components.get_mut(&new_connection.to.id).unwrap();
         to.in_connections.insert(new_connection.clone());
 
         //Update the order and undo the connection if it creates a loop
@@ -168,6 +171,7 @@ impl Graph {
             .map(|c| (c.from.id, c.to.id))
             .collect();
         //S ← Set of all nodes with no incoming edge
+        println!("{}", self.components.get(&0).unwrap().in_connections.len());
         let mut s: Vec<usize> = self
             .components
             .iter()
@@ -202,44 +206,6 @@ impl Graph {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-pub enum IOType {
-    Voltage,
-}
-
-#[derive(Debug)]
-pub enum ConnectionError {
-    LoopingConnection,
-    ControllerNotInGraph,
-    InputOccupied,
-    MismatchedConnectionTypes,
-    InputNotInComponent,
-    OutputNotInComponent,
-}
-
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct Connection {
-    pub from: Node,
-    pub to: Node,
-}
-
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct Node {
-    pub id: usize,
-    pub io: IOType,
-    pub name: String,
-}
-
-#[derive(Default)]
-pub struct Input<'a> {
-    pub voltages: HashMap<String, &'a Vec<f32>>,
-}
-
-#[derive(Default)]
-pub struct Output {
-    pub voltages: HashMap<String, Vec<f32>>,
-}
-
 struct Component {
     model: Box<dyn Model + Send + Sync>,
     in_connections: HashSet<Connection>,
@@ -262,12 +228,4 @@ impl Component {
 
         new_outputs
     }
-}
-
-pub trait Model {
-    fn output_format(&self) -> HashMap<String, IOType>;
-
-    fn input_format(&self) -> HashMap<String, IOType>;
-
-    fn evaluate(&mut self, buffer_size: usize, inputs: Input, outputs: &mut Output);
 }
