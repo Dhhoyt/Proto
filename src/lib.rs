@@ -1,13 +1,13 @@
+pub mod audio_io;
+pub mod model_utils;
+
+mod graph;
+
 use std::{sync::Arc, ops::{DerefMut}, collections::{HashSet, HashMap}};
 use cpal::{traits::{DeviceTrait, StreamTrait}, SampleRate, StreamConfig, Stream};
 use graph::Graph;
 use audio_io::{AudioOutput};
 use parking_lot::Mutex;
-
-mod graph;
-
-pub mod audio_io;
-pub mod model_utils;
 
 pub struct Engine {
     pub stream_config: StreamConfig,
