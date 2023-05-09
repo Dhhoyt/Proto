@@ -2,11 +2,14 @@ use std::{sync::Arc, ops::{DerefMut}, collections::{HashSet, HashMap}};
 
 use cpal::{traits::{HostTrait, DeviceTrait, StreamTrait}, SampleRate, StreamConfig, Stream, default_host};
 use graph::Graph;
-use models::{AudioInput, AudioOutput};
+use audio_io::{AudioInput, AudioOutput};
+use model_utils::ConstantAmplifier;
 use parking_lot::Mutex;
 
 mod graph;
-mod models;
+
+pub mod audio_io;
+pub mod model_utils;
 
 pub struct Engine {
     pub stream_config: StreamConfig,
@@ -114,8 +117,14 @@ fn err_fn(err: cpal::StreamError) {
 fn main() {
     let mut engine = Engine::new(default_host().default_output_device().unwrap(), 64, 48000);
     engine.add_model(Box::new(AudioInput::new(&engine.stream_config)));
+    engine.add_model(Box::new(ConstantAmplifier::new(1.)));
     let con = Connection {
         from: Node { id: 1, io: IOType::Voltage, name: String::from("Audio") },
+        to: Node { id: 2, io: IOType::Voltage, name: String::from("Input") }
+    };
+    engine.add_connection(con).unwrap();
+    let con = Connection {
+        from: Node { id: 2, io: IOType::Voltage, name: String::from("Output") },
         to: Node { id: 0, io: IOType::Voltage, name: String::from("Audio") }
     };
     engine.add_connection(con).unwrap();
