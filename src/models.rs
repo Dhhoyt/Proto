@@ -1,5 +1,5 @@
 use std::{collections::HashMap};
-use cpal::{traits::{HostTrait, DeviceTrait, StreamTrait}, SampleRate, Stream};
+use cpal::{traits::{HostTrait, DeviceTrait, StreamTrait}, Stream};
 use rtrb::{Consumer, RingBuffer, Producer};
 
 use crate::{IOType, Output, Input, Model};
@@ -74,7 +74,7 @@ impl Model for AudioOutput {
     }
     fn evaluate(&mut self, _buffer_size: usize, inputs: Input, _outputs: &mut Output) {
         for i in inputs.voltages.get("Audio").unwrap().iter() {
-            self.0.push(*i);
+            self.0.push(*i).unwrap();
         }
     }
 }

@@ -11,7 +11,7 @@ mod models;
 pub struct Engine {
     pub stream_config: StreamConfig,
     graph: Arc<Mutex<Graph>>,
-    buffer_size: usize,
+    #[allow(dead_code)]
     output_stream: Stream,
 }
 
@@ -45,7 +45,7 @@ impl Engine {
         };
         let output_stream = output_device.build_output_stream(&config, output_data_fn, err_fn, None).unwrap();
         output_stream.play().unwrap();
-        Engine { graph: graph, buffer_size: buffer_size, stream_config: config, output_stream: output_stream }
+        Engine { graph: graph, stream_config: config, output_stream: output_stream }
     }
 
     pub fn add_model(&mut self, model: Box<dyn Model + Send + Sync>) -> usize {
