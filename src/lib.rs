@@ -1,9 +1,7 @@
 use std::{sync::Arc, ops::{DerefMut}, collections::{HashSet, HashMap}};
-
-use cpal::{traits::{HostTrait, DeviceTrait, StreamTrait}, SampleRate, StreamConfig, Stream, default_host};
+use cpal::{traits::{DeviceTrait, StreamTrait}, SampleRate, StreamConfig, Stream};
 use graph::Graph;
-use audio_io::{AudioInput, AudioOutput};
-use model_utils::ConstantAmplifier;
+use audio_io::{AudioOutput};
 use parking_lot::Mutex;
 
 mod graph;
@@ -38,6 +36,7 @@ impl Engine {
                     }
                 };
             }
+            //Evaluate the graph here so its synced with the 
             let mut output_reference = output_reference.lock();
             let graph = output_reference.deref_mut();
             graph.evaluate();
@@ -112,21 +111,4 @@ pub struct Node {
 
 fn err_fn(err: cpal::StreamError) {
     eprintln!("an error occurred on stream: {}", err);
-}
-
-fn main() {
-    let mut engine = Engine::new(default_host().default_output_device().unwrap(), 64, 48000);
-    engine.add_model(Box::new(AudioInput::new(&engine.stream_config)));
-    engine.add_model(Box::new(ConstantAmplifier::new(100.)));
-    let con = Connection {
-        from: Node { id: 1, io: IOType::Voltage, name: String::from("Audio") },
-        to: Node { id: 2, io: IOType::Voltage, name: String::from("Input") }
-    };
-    engine.add_connection(con).unwrap();
-    let con = Connection {
-        from: Node { id: 2, io: IOType::Voltage, name: String::from("Output") },
-        to: Node { id: 0, io: IOType::Voltage, name: String::from("Audio") }
-    };
-    engine.add_connection(con).unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(30));
 }

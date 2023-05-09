@@ -33,7 +33,7 @@ impl Model for ConstantAmplifier {
 pub struct DuoSignalMixer(f32, f32);
 
 impl DuoSignalMixer {
-    fn new(input_1_mult: f32, input_2_mult: f32) -> Self {
+    pub fn new(input_1_mult: f32, input_2_mult: f32) -> Self {
         DuoSignalMixer(input_1_mult, input_2_mult)
     }
 }
