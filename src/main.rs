@@ -26,6 +26,7 @@ impl Engine {
         graph.add_model(Box::new(output));
         let graph = Arc::new(Mutex::new(graph));
         let output_reference = Arc::clone(&graph);
+        //The actual code that outputs and runs the graph. This function runs once for every buffer the device requests.
         let output_data_fn = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
             let mut input_fell_behind = false;
             for sample in data {
@@ -37,7 +38,6 @@ impl Engine {
                     }
                 };
             }
-            let output_reference = output_reference.to_owned();
             let mut output_reference = output_reference.lock();
             let graph = output_reference.deref_mut();
             graph.evaluate();
@@ -117,7 +117,7 @@ fn err_fn(err: cpal::StreamError) {
 fn main() {
     let mut engine = Engine::new(default_host().default_output_device().unwrap(), 64, 48000);
     engine.add_model(Box::new(AudioInput::new(&engine.stream_config)));
-    engine.add_model(Box::new(ConstantAmplifier::new(1.)));
+    engine.add_model(Box::new(ConstantAmplifier::new(100.)));
     let con = Connection {
         from: Node { id: 1, io: IOType::Voltage, name: String::from("Audio") },
         to: Node { id: 2, io: IOType::Voltage, name: String::from("Input") }

@@ -68,6 +68,7 @@ impl Graph {
             },
         );
         self.next_free_id += 1;
+        //There is no situation in which adding a new unconnected model will cause the topo sort to return an error
         self.evaluation_order = self.sort().unwrap();
         self.next_free_id - 1
     }
@@ -91,9 +92,6 @@ impl Graph {
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
-        for i in to.model.input_format().keys() {
-            println!("{}", i);
-        }
         match to.model.input_format().get(&new_connection.to.name) {
             None => return Err(ConnectionError::InputNotInComponent),
             Some(t) => {
@@ -125,13 +123,14 @@ impl Graph {
             }
         }
 
+        //Add the connections now that the guard statements have been passed
         let from = self.components.get_mut(&new_connection.from.id).unwrap();
         from.out_connections.insert(new_connection.clone());
 
         let to = self.components.get_mut(&new_connection.to.id).unwrap();
         to.in_connections.insert(new_connection.clone());
 
-        //Update the order and undo the connection if it creates a loop
+        //Update the processing order and undo the connection if it creates a loop
         let order = self.sort();
         match order {
             Err(e) => {
@@ -171,7 +170,6 @@ impl Graph {
             .map(|c| (c.from.id, c.to.id))
             .collect();
         //S ← Set of all nodes with no incoming edge
-        println!("{}", self.components.get(&0).unwrap().in_connections.len());
         let mut s: Vec<usize> = self
             .components
             .iter()
