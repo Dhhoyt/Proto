@@ -112,7 +112,7 @@ fn err_fn(err: cpal::StreamError) {
 }
 
 fn main() {
-    let mut engine = Engine::new(default_host().default_output_device().unwrap(), 256, 48000);
+    let mut engine = Engine::new(default_host().default_output_device().unwrap(), 64, 48000);
     engine.add_model(Box::new(AudioInput::new(&engine.stream_config)));
     let con = Connection {
         from: Node { id: 1, io: IOType::Voltage, name: String::from("Audio") },

@@ -11,9 +11,7 @@ impl AudioInput {
         let host = cpal::default_host();
         let input_device = host.default_input_device().unwrap();
         let (mut producer, consumer) = RingBuffer::<f32>::new(16384);
-        for _ in 0..512 {
-            producer.push(0.).unwrap();
-        }
+
         let input_data_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
             let mut output_fell_behind = false;
             for &sample in data {
