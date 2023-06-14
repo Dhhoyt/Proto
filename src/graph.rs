@@ -1,9 +1,6 @@
-use std::{
-    collections::{HashMap, HashSet},
-};
+use std::collections::{HashMap, HashSet};
 
-use crate::{Model, Output, Input, ConnectionError, Connection, IOType};
-
+use crate::{Config, Connection, ConnectionError, IOType, Input, Model, Output};
 
 pub struct Graph {
     buffer_size: usize,
@@ -22,9 +19,13 @@ impl Graph {
         }
     }
 
-    pub fn evaluate(&mut self) {
+    pub fn evaluate(&mut self, sample_rate: usize) {
         let default_voltage = vec![0.; self.buffer_size];
         let mut outputs: HashMap<usize, Output> = HashMap::new();
+        let config = Config {
+            buffer_size: self.buffer_size,
+            delta: 1.0 / sample_rate as f32,
+        };
         for id in self.evaluation_order.iter() {
             let component = self.components.get_mut(&id).unwrap();
             let mut output = component.construct_outputs(self.buffer_size);
@@ -53,7 +54,9 @@ impl Graph {
                     }
                 }
             }
-            component.model.evaluate(self.buffer_size, input, &mut output);
+            component
+                .model
+                .evaluate(self.buffer_size, input, &mut output, &config);
             outputs.insert(*id, output);
         }
     }
@@ -202,10 +205,35 @@ impl Graph {
         //return L   (a topologically sorted order)
         Ok(l)
     }
+
+    pub fn remove_model(&mut self, id: usize) -> bool {
+        let c = match self.components.get(&id) {
+            Some(c) => c,
+            None => return false,
+        };
+        let in_connections = c.in_connections.clone().into_iter();
+        let out_connections = c.out_connections.clone().into_iter();
+        self.components.remove(&id);
+        for i in in_connections {
+            self.components
+                .get_mut(&i.from.id)
+                .unwrap()
+                .out_connections
+                .remove(&i);
+        }
+        for i in out_connections {
+            self.components
+                .get_mut(&i.to.id)
+                .unwrap()
+                .in_connections
+                .remove(&i);
+        }
+        true
+    }
 }
 
 struct Component {
-    model: Box<dyn Model + Send + Sync>,
+    pub model: Box<dyn Model + Send + Sync>,
     in_connections: HashSet<Connection>,
     out_connections: HashSet<Connection>,
 }

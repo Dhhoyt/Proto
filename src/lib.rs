@@ -3,11 +3,18 @@ pub mod model_utils;
 
 mod graph;
 
-use std::{sync::Arc, ops::{DerefMut}, collections::{HashSet, HashMap}};
-use cpal::{traits::{DeviceTrait, StreamTrait}, SampleRate, StreamConfig, Stream};
+use audio_io::AudioOutput;
+use cpal::{
+    traits::{DeviceTrait, StreamTrait},
+    SampleRate, Stream, StreamConfig,
+};
 use graph::Graph;
-use audio_io::{AudioOutput};
 use parking_lot::Mutex;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::DerefMut,
+    sync::Arc,
+};
 
 pub struct Engine {
     pub stream_config: StreamConfig,
@@ -18,7 +25,11 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(output_device: cpal::Device, buffer_size: usize, sample_rate: usize) -> Self {
-        let config = cpal::StreamConfig { channels: 1, sample_rate: SampleRate(sample_rate as u32), buffer_size: cpal::BufferSize::Fixed(buffer_size as u32)};
+        let config = cpal::StreamConfig {
+            channels: 1,
+            sample_rate: SampleRate(sample_rate as u32),
+            buffer_size: cpal::BufferSize::Fixed(buffer_size as u32),
+        };
         let mut graph = Graph::new(buffer_size);
         let (output, mut consumer) = AudioOutput::new();
         graph.add_model(Box::new(output));
@@ -36,30 +47,47 @@ impl Engine {
                     }
                 };
             }
-            //Evaluate the graph here so its synced with the 
+            //Evaluate the graph here so its synced with the
             let mut output_reference = output_reference.lock();
             let graph = output_reference.deref_mut();
-            graph.evaluate();
-            
+            graph.evaluate(sample_rate);
+
             if input_fell_behind {
                 eprintln!("input stream fell behind: try increasing latency");
             }
         };
-        let output_stream = output_device.build_output_stream(&config, output_data_fn, err_fn, None).unwrap();
+        let output_stream = output_device
+            .build_output_stream(&config, output_data_fn, err_fn, None)
+            .unwrap();
         output_stream.play().unwrap();
-        Engine { graph: graph, stream_config: config, output_stream: output_stream }
+        Engine {
+            graph: graph,
+            stream_config: config,
+            output_stream: output_stream,
+        }
     }
 
     pub fn add_model(&mut self, model: Box<dyn Model + Send + Sync>) -> usize {
         self.graph.lock().add_model(model)
     }
-    
+
     pub fn connections(&self) -> HashSet<Connection> {
         self.graph.lock().connections()
     }
 
     pub fn add_connection(&mut self, new_connection: Connection) -> Result<(), ConnectionError> {
         self.graph.lock().add_connection(new_connection)
+    }
+
+    pub fn remove_connection(
+        &mut self,
+        old_connection: Connection,
+    ) -> Result<bool, ConnectionError> {
+        self.graph.lock().remove_connection(old_connection)
+    }
+
+    pub fn remove_model(&mut self, id: usize) -> bool {
+        self.graph.lock().remove_model(id)
     }
 }
 
@@ -68,7 +96,18 @@ pub trait Model {
 
     fn input_format(&self) -> HashMap<String, IOType>;
 
-    fn evaluate(&mut self, buffer_size: usize, inputs: Input, outputs: &mut Output);
+    fn evaluate(
+        &mut self,
+        buffer_size: usize,
+        inputs: Input,
+        outputs: &mut Output,
+        config: &Config,
+    );
+}
+
+pub struct Config {
+    buffer_size: usize,
+    delta: f32,
 }
 
 #[derive(Default)]
