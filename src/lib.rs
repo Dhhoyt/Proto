@@ -28,6 +28,14 @@ pub struct OutputDevice {
     device: cpal::Device
 }
 
+impl OutputDevice {
+    pub fn default() -> Option<Self> {
+        let host = cpal::default_host();
+        let device = host.default_output_device()?;
+        Some(OutputDevice { name: device.name().unwrap(), device })
+    }
+}
+
 impl Engine {
     pub fn new(output_device: &OutputDevice, buffer_size: usize, sample_rate: usize) -> Self {
         let output_device = &output_device.device;
