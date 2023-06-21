@@ -29,8 +29,8 @@ pub struct OutputDevice {
 }
 
 impl Engine {
-    pub fn new(output_device: OutputDevice, buffer_size: usize, sample_rate: usize) -> Self {
-        let output_device = output_device.device;
+    pub fn new(output_device: &OutputDevice, buffer_size: usize, sample_rate: usize) -> Self {
+        let output_device = &output_device.device;
         let config = cpal::StreamConfig {
             channels: 1,
             sample_rate: SampleRate(sample_rate as u32),
