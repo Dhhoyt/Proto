@@ -5,7 +5,7 @@ mod graph;
 
 use audio_io::AudioOutput;
 use cpal::{
-    traits::{DeviceTrait, StreamTrait},
+    traits::{DeviceTrait, StreamTrait, HostTrait},
     SampleRate, Stream, StreamConfig,
 };
 use graph::Graph;
@@ -23,8 +23,14 @@ pub struct Engine {
     output_stream: Stream,
 }
 
+pub struct OutputDevice {
+    pub name: String,
+    device: cpal::Device
+}
+
 impl Engine {
-    pub fn new(output_device: cpal::Device, buffer_size: usize, sample_rate: usize) -> Self {
+    pub fn new(output_device: OutputDevice, buffer_size: usize, sample_rate: usize) -> Self {
+        let output_device = output_device.device;
         let config = cpal::StreamConfig {
             channels: 1,
             sample_rate: SampleRate(sample_rate as u32),
@@ -89,6 +95,14 @@ impl Engine {
     pub fn remove_model(&mut self, id: usize) -> bool {
         self.graph.lock().remove_model(id)
     }
+}
+
+pub fn list_devices() -> Vec<OutputDevice> {
+    let host = cpal::default_host();
+    host.output_devices().unwrap().map(|device| {
+        OutputDevice { name: device.name().unwrap(), device }
+    }).collect()
+
 }
 
 pub trait Model {
