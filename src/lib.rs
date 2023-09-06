@@ -9,6 +9,7 @@ use cpal::{
     SampleRate, Stream, StreamConfig,
 };
 use graph::Graph;
+use midi_types::MidiMessage;
 use parking_lot::Mutex;
 use std::{
     collections::{HashMap, HashSet},
@@ -75,9 +76,9 @@ impl Engine {
             .unwrap();
         output_stream.play().unwrap();
         Engine {
-            graph: graph,
+            graph,
             stream_config: config,
-            output_stream: output_stream,
+            output_stream,
         }
     }
 
@@ -135,16 +136,19 @@ pub struct Config {
 #[derive(Default)]
 pub struct Input<'a> {
     pub voltages: HashMap<String, &'a Vec<f32>>,
+    pub midi_events: HashMap<String, &'a Vec<Option<MidiMessage>>>,
 }
 
 #[derive(Default)]
 pub struct Output {
     pub voltages: HashMap<String, Vec<f32>>,
+    pub midi_events: HashMap<String, Vec<Option<MidiMessage>>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum IOType {
     Voltage,
+    Midi,
 }
 
 #[derive(Debug)]

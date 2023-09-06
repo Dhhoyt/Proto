@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{Config, Connection, ConnectionError, IOType, Input, Model, Output};
 
+use midi_types::MidiMessage;
+
 pub struct Graph {
     buffer_size: usize,
     components: HashMap<usize, Component>,
@@ -12,7 +14,7 @@ pub struct Graph {
 impl Graph {
     pub fn new(buffer_size: usize) -> Self {
         Graph {
-            buffer_size: buffer_size,
+            buffer_size,
             components: HashMap::new(),
             evaluation_order: Vec::new(),
             next_free_id: 0,
@@ -21,6 +23,7 @@ impl Graph {
 
     pub fn evaluate(&mut self, sample_rate: usize) {
         let default_voltage = vec![0.; self.buffer_size];
+        let default_midi: Vec<Option<MidiMessage>> = vec![None; self.buffer_size];
         let mut outputs: HashMap<usize, Output> = HashMap::new();
         let config = Config {
             buffer_size: self.buffer_size,
@@ -32,15 +35,15 @@ impl Graph {
             let mut input = Input::default();
             //Get references to all the inputs with a connection
             for i in component.in_connections.iter() {
+                let output = outputs.get(&i.from.id).unwrap();
                 match i.from.io {
                     IOType::Voltage => {
-                        let value = outputs
-                            .get(&i.from.id)
-                            .unwrap()
-                            .voltages
-                            .get(&i.from.name)
-                            .unwrap();
+                        let value = output.voltages.get(&i.from.name).unwrap();
                         input.voltages.insert(i.to.name.clone(), value);
+                    }
+                    IOType::Midi => {
+                        let value = output.midi_events.get(&i.from.name).unwrap();
+                        input.midi_events.insert(i.to.name.clone(), value);
                     }
                 }
             }
@@ -50,6 +53,11 @@ impl Graph {
                     IOType::Voltage => {
                         if !input.voltages.contains_key(&i.0) {
                             input.voltages.insert(i.0.clone(), &default_voltage);
+                        }
+                    }
+                    IOType::Midi => {
+                        if !input.midi_events.contains_key(&i.0) {
+                            input.midi_events.insert(i.0.clone(), &default_midi);
                         }
                     }
                 }
@@ -248,6 +256,11 @@ impl Component {
             match io_type {
                 IOType::Voltage => {
                     new_outputs.voltages.insert(name, vec![0.; buffer_size]);
+                }
+                IOType::Midi => {
+                    new_outputs
+                        .midi_events
+                        .insert(name, vec![None; buffer_size]);
                 }
             }
         }
