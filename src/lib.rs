@@ -17,6 +17,8 @@ use std::{
     sync::Arc,
 };
 
+pub use midi_types;
+
 pub struct Engine {
     pub stream_config: StreamConfig,
     graph: Arc<Mutex<Graph>>,
