@@ -19,6 +19,8 @@ use std::{
 
 pub use midi_types;
 
+type ModelHolder = Arc<Mutex<Box<dyn Model + Send + Sync>>>;
+
 pub struct Engine {
     pub stream_config: StreamConfig,
     graph: Arc<Mutex<Graph>>,
@@ -40,7 +42,7 @@ impl OutputDevice {
 }
 
 impl Engine {
-    pub fn new(output_device: &OutputDevice, buffer_size: usize, sample_rate: usize) -> Self {
+    pub fn new(output_device: &OutputDevice, buffer_size: usize, sample_rate: usize) -> (Self, ModelHolder) {
         let output_device = &output_device.device;
         let config = cpal::StreamConfig {
             channels: 1,
@@ -49,7 +51,8 @@ impl Engine {
         };
         let mut graph = Graph::new(buffer_size);
         let (output, mut consumer) = AudioOutput::new();
-        graph.add_model(Box::new(output));
+        let output_model: ModelHolder = Arc::new(Mutex::new(Box::new(output)));
+        graph.add_model(output_model.clone());
         let graph = Arc::new(Mutex::new(graph));
         let output_reference = Arc::clone(&graph);
         //The actual code that outputs and runs the graph. This function runs once for every buffer the device requests.
@@ -77,14 +80,14 @@ impl Engine {
             .build_output_stream(&config, output_data_fn, err_fn, None)
             .unwrap();
         output_stream.play().unwrap();
-        Engine {
+        (Engine {
             graph,
             stream_config: config,
             output_stream,
-        }
+        }, output_model)
     }
 
-    pub fn add_model(&mut self, model: Box<dyn Model + Send + Sync>) -> usize {
+    pub fn add_model(&mut self, model: ModelHolder) -> usize {
         self.graph.lock().add_model(model)
     }
 

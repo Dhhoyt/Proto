@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{Config, Connection, ConnectionError, IOType, Input, Model, Output};
+use crate::{Config, Connection, ConnectionError, IOType, Input, Output, ModelHolder};
 
 use midi_types::MidiMessage;
 
@@ -48,7 +48,7 @@ impl Graph {
                 }
             }
             //Fill in defaults for all the inputs without a connection
-            for i in component.model.input_format() {
+            for i in component.model.lock().input_format() {
                 match i.1 {
                     IOType::Voltage => {
                         if !input.voltages.contains_key(&i.0) {
@@ -63,13 +63,13 @@ impl Graph {
                 }
             }
             component
-                .model
+                .model.lock()
                 .evaluate(self.buffer_size, input, &mut output, &config);
             outputs.insert(*id, output);
         }
     }
 
-    pub fn add_model(&mut self, model: Box<dyn Model + Send + Sync>) -> usize {
+    pub fn add_model(&mut self, model: ModelHolder) -> usize {
         self.components.insert(
             self.next_free_id,
             Component {
@@ -103,7 +103,7 @@ impl Graph {
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
-        match to.model.input_format().get(&new_connection.to.name) {
+        match to.model.lock().input_format().get(&new_connection.to.name) {
             None => return Err(ConnectionError::InputNotInComponent),
             Some(t) => {
                 if *t != new_connection.to.io {
@@ -125,7 +125,7 @@ impl Graph {
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
-        match from.model.output_format().get(&new_connection.from.name) {
+        match from.model.lock().output_format().get(&new_connection.from.name) {
             None => return Err(ConnectionError::OutputNotInComponent),
             Some(t) => {
                 if *t != new_connection.from.io {
@@ -241,14 +241,14 @@ impl Graph {
 }
 
 struct Component {
-    pub model: Box<dyn Model + Send + Sync>,
+    pub model: ModelHolder,
     in_connections: HashSet<Connection>,
     out_connections: HashSet<Connection>,
 }
 
 impl Component {
     fn construct_outputs(&self, buffer_size: usize) -> Output {
-        let request = self.model.output_format();
+        let request = self.model.lock().output_format();
 
         let mut new_outputs = Output::default();
 
