@@ -1,6 +1,8 @@
-use std::{collections::HashMap, iter::zip};
+use std::{collections::HashMap, iter::zip, sync::Arc};
 
-use crate::{Config, IOType, Model};
+use parking_lot::Mutex;
+
+use crate::{Config, IOType, Model, ModelHolder};
 
 pub struct ConstantAmplifier(f32);
 
@@ -112,15 +114,16 @@ pub struct Tone {
 }
 
 impl Tone {
-    pub fn new(resistor_value: f32) -> Self {
-        Tone {
+    pub fn new(resistor_value: f32) -> ModelHolder {
+        let tone = Tone {
             capicitor_value: 1.5e-8,
             resistor_one_value: 100_000.,
             resistor_two_value: resistor_value,
             inductor_value: 2.,
             current: 0.,
             capicitor_voltage: 0.,
-        }
+        };
+        Arc::new(Mutex::new(Box::new(tone)))
     }
 }
 
@@ -154,7 +157,7 @@ impl Model for Tone {
                 - (self.current * self.resistor_two_value + self.capicitor_voltage))
                 / self.inductor_value)
                 * config.delta;
-            self.capicitor_value += (self.current/self.capicitor_voltage) * config.delta;
+            self.capicitor_value += (self.current / self.capicitor_voltage) * config.delta;
             outputs[index] = self.current * self.resistor_two_value + self.capicitor_voltage;
         }
     }

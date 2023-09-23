@@ -5,7 +5,7 @@ mod graph;
 
 use audio_io::AudioOutput;
 use cpal::{
-    traits::{DeviceTrait, StreamTrait, HostTrait},
+    traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleRate, Stream, StreamConfig,
 };
 use graph::Graph;
@@ -30,19 +30,26 @@ pub struct Engine {
 
 pub struct OutputDevice {
     pub name: String,
-    device: cpal::Device
+    device: cpal::Device,
 }
 
 impl OutputDevice {
     pub fn default() -> Option<Self> {
         let host = cpal::default_host();
         let device = host.default_output_device()?;
-        Some(OutputDevice { name: device.name().unwrap(), device })
+        Some(OutputDevice {
+            name: device.name().unwrap(),
+            device,
+        })
     }
 }
 
 impl Engine {
-    pub fn new(output_device: &OutputDevice, buffer_size: usize, sample_rate: usize) -> (Self, ModelHolder) {
+    pub fn new(
+        output_device: &OutputDevice,
+        buffer_size: usize,
+        sample_rate: usize,
+    ) -> (Self, ModelHolder) {
         let output_device = &output_device.device;
         let config = cpal::StreamConfig {
             channels: 1,
@@ -58,6 +65,8 @@ impl Engine {
         //The actual code that outputs and runs the graph. This function runs once for every buffer the device requests.
         let output_data_fn = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
             let mut input_fell_behind = false;
+            let buffer_size = data.len();
+            println!("output len: {}", data.len());
             for sample in data {
                 *sample = match consumer.pop() {
                     Ok(s) => s,
@@ -70,7 +79,7 @@ impl Engine {
             //Evaluate the graph here so its synced with the
             let mut output_reference = output_reference.lock();
             let graph = output_reference.deref_mut();
-            graph.evaluate(sample_rate);
+            graph.evaluate(sample_rate, buffer_size);
 
             if input_fell_behind {
                 eprintln!("input stream fell behind: try increasing latency");
@@ -80,11 +89,14 @@ impl Engine {
             .build_output_stream(&config, output_data_fn, err_fn, None)
             .unwrap();
         output_stream.play().unwrap();
-        (Engine {
-            graph,
-            stream_config: config,
-            output_stream,
-        }, output_model)
+        (
+            Engine {
+                graph,
+                stream_config: config,
+                output_stream,
+            },
+            output_model,
+        )
     }
 
     pub fn add_model(&mut self, model: ModelHolder) -> usize {
@@ -113,10 +125,13 @@ impl Engine {
 
 pub fn list_devices() -> Vec<OutputDevice> {
     let host = cpal::default_host();
-    host.output_devices().unwrap().map(|device| {
-        OutputDevice { name: device.name().unwrap(), device }
-    }).collect()
-
+    host.output_devices()
+        .unwrap()
+        .map(|device| OutputDevice {
+            name: device.name().unwrap(),
+            device,
+        })
+        .collect()
 }
 
 pub trait Model {
@@ -168,12 +183,12 @@ pub enum ConnectionError {
 
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct Connection {
-    pub from: Node,
-    pub to: Node,
+    pub from: Port,
+    pub to: Port,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq)]
-pub struct Node {
+pub struct Port {
     pub id: usize,
     pub io: IOType,
     pub name: String,

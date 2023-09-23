@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{Config, Connection, ConnectionError, IOType, Input, Output, ModelHolder};
+use crate::{Config, Connection, ConnectionError, IOType, Input, ModelHolder, Output};
 
 use midi_types::MidiMessage;
 
@@ -21,17 +21,17 @@ impl Graph {
         }
     }
 
-    pub fn evaluate(&mut self, sample_rate: usize) {
-        let default_voltage = vec![0.; self.buffer_size];
-        let default_midi: Vec<Option<MidiMessage>> = vec![None; self.buffer_size];
+    pub fn evaluate(&mut self, sample_rate: usize, buffer_size: usize) {
+        let default_voltage = vec![0.; buffer_size];
+        let default_midi: Vec<Option<MidiMessage>> = vec![None; buffer_size];
         let mut outputs: HashMap<usize, Output> = HashMap::new();
         let config = Config {
-            buffer_size: self.buffer_size,
+            buffer_size,
             delta: 1.0 / sample_rate as f32,
         };
         for id in self.evaluation_order.iter() {
             let component = self.components.get_mut(&id).unwrap();
-            let mut output = component.construct_outputs(self.buffer_size);
+            let mut output = component.construct_outputs(buffer_size);
             let mut input = Input::default();
             //Get references to all the inputs with a connection
             for i in component.in_connections.iter() {
@@ -63,8 +63,9 @@ impl Graph {
                 }
             }
             component
-                .model.lock()
-                .evaluate(self.buffer_size, input, &mut output, &config);
+                .model
+                .lock()
+                .evaluate(buffer_size, input, &mut output, &config);
             outputs.insert(*id, output);
         }
     }
@@ -125,7 +126,12 @@ impl Graph {
             Some(c) => c,
             None => return Result::Err(ConnectionError::ControllerNotInGraph),
         };
-        match from.model.lock().output_format().get(&new_connection.from.name) {
+        match from
+            .model
+            .lock()
+            .output_format()
+            .get(&new_connection.from.name)
+        {
             None => return Err(ConnectionError::OutputNotInComponent),
             Some(t) => {
                 if *t != new_connection.from.io {

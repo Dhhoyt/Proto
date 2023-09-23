@@ -2,15 +2,16 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Stream,
 };
+use parking_lot::Mutex;
 use rtrb::{Consumer, Producer, RingBuffer};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{Config, IOType, Input, Model, Output};
+use crate::{Config, IOType, Input, Model, ModelHolder, Output};
 
 pub struct AudioInput(Consumer<f32>, Stream);
 
 impl AudioInput {
-    pub fn new(stream_config: &cpal::StreamConfig) -> Self {
+    pub fn new(stream_config: &cpal::StreamConfig) -> ModelHolder {
         let host = cpal::default_host();
         let input_device = host.default_input_device().unwrap();
         let (mut producer, consumer) = RingBuffer::<f32>::new(16384);
@@ -30,7 +31,7 @@ impl AudioInput {
             .build_input_stream(stream_config, input_data_fn, err_fn, None)
             .unwrap();
         input_stream.play().unwrap();
-        AudioInput(consumer, input_stream)
+        Arc::new(Mutex::new(Box::new(AudioInput(consumer, input_stream))))
     }
 }
 
@@ -50,6 +51,7 @@ impl Model for AudioInput {
         outputs: &mut Output,
         _config: &Config,
     ) {
+        println!("doing stuff");
         let mut audio: Vec<f32> = Vec::with_capacity(buffer_size);
         for _ in 0..buffer_size {
             match self.0.pop() {
@@ -72,7 +74,10 @@ pub struct AudioOutput(Producer<f32>);
 
 impl AudioOutput {
     pub fn new() -> (Self, rtrb::Consumer<f32>) {
-        let (producer, consumer) = RingBuffer::<f32>::new(16384);
+        let (mut producer, consumer) = RingBuffer::<f32>::new(16384);
+        for _ in 0..1024 {
+            producer.push(0.).unwrap();
+        }
         (AudioOutput(producer), consumer)
     }
 }
@@ -93,9 +98,17 @@ impl Model for AudioOutput {
         _outputs: &mut Output,
         _config: &Config,
     ) {
+        let mut output_fell_behind = false;
         for i in inputs.voltages.get("Audio").unwrap().iter() {
-            self.0.push(*i).unwrap();
+            match self.0.push(*i) {
+                Ok(_) => (),
+                Err(_) => output_fell_behind = true,
+            };
         }
+        if output_fell_behind {
+            println!("output device fell behind: try increasing latency");
+        }
+        println!("{}", inputs.voltages.get("Audio").unwrap().len());
     }
 }
 
